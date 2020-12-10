@@ -1,0 +1,62 @@
+Prerequisites:-
+    1. VPC must have DNS hostname and DNS resolution support. Otherwise, your nodes cannot register with your cluster
+        https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html
+    2. Subnet taggig is needed for EKS to create loadbalancer
+        https://docs.aws.amazon.com/eks/latest/userguide/network_reqs.html#vpc-subnet-tagging
+        https://aws.amazon.com/premiumsupport/knowledge-center/eks-vpc-subnet-discovery/
+        - Private subnets must be tagged as follows so that Kubernetes knows it can use the subnets for internal load balancers
+        kubernetes.io/role/internal-elb 1
+        - Public subnets must be tagged as follows so that Kubernetes knows to use only those subnets for external load balancers instead of choosing a public subnet in each Availability Zone (in lexicographical order by subnet ID)
+        kubernetes.io/role/elb 1
+        - Tag all public and private subnets that your cluster uses for load balancer resources with the following key-value pair:
+        kubernetes.io/cluster/cluster-name shared
+Create Cluster using eksctl command (this is the easy way to do this.):-
+    1. Here the method explains giving existing VPC, Subnet, Pod execution role, Security Group. If you don't give any of these, eksctl will create it for you.
+    2. Create a file called cluster-fargate.yaml and have required configuration there. Attached the file here.
+    3. Run the command eksctl create cluster -f cluster-fargate.yaml
+    4. Configure cluster using kubergrunt command or aws eks command can also be used.
+       kubergrunt eks configure --eks-cluster-arn arn:aws:eks:us-east-1:119131561188:cluster/fargate-cluster
+    5. Create namespace using "kubectl create namespace applications"
+    6. Create the deployment using kubectl apply -f deployment.yaml
+
+# While creating the service two things should be matched. 
+# a) matchLabels selctor should match with pod matchLabels
+# b) Service targetPort should be matched with containerPort of the container inside pod
+# c) Multiple services can have the same Service port, because they have different IP address assigned.
+    7. Create a service using kubectl apply -f service.yaml
+
+Port forwarding:-
+    8. Create a port forwarding kubectl port-forward service/<service name> 3000:80
+    9. Try accessing the application using curl http://localhost:3000 or providing this URL in the GUI
+
+ALB Ingress controller:-
+# Two things should match in case of Ingress
+# a) The servicePort of the Ingress should match the port of the Service
+# b) The serviceName of the Ingress should match the name of the Service
+ 
+https://aws.amazon.com/blogs/containers/using-alb-ingress-controller-with-amazon-eks-on-fargate/
+
+    10. Setup OIDC provider in aws
+        This step is needed to give IAM permissions to a Fargate pod running in the cluster using the IAM for Service Accounts feature
+        eksctl utils associate-iam-oidc-provider --cluster fargate-cluster --approve
+    11. The next step is to create the IAM policy that will be used by the ALB Ingress Controller deployment 
+        This policy will be later associated to the Kubernetes service account and will allow the ALB Ingress Controller pods to create and manage the ALB’s resources in your AWS account for you.
+        
+        wget -O alb-ingress-iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/master/docs/examples/iam-policy.json
+    12. Create a role having above policy attached. Make sure you follow the below procedure for creating the role. 
+        Because you need to create Web identity in the role.
+        https://docs.aws.amazon.com/eks/latest/userguide/create-service-account-iam-policy-and-role.html
+    13. Create a cluster role, role binding, and a Kubernetes service account
+        #STACK_NAME=eksctl-$CLUSTER_NAME-cluster
+        #VPC_ID=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" | jq -r '[.Stacks[0].Outputs[] | {key: .OutputKey, value: .OutputValue}] | from_entries' | jq -r '.VPC')
+        #AWS_ACCOUNT_ID=$(aws sts get-caller-identity | jq -r '.Account')
+        
+        kubectl apply -f rbac-role.yaml
+    13. Create service account using below command.
+        kubectl apply -f serviceAccount.yaml
+
+    14. Deploy the ALB ingress controller
+        kubectl apply -f alb-ingress-controller.yaml
+    15. Deploy the ingress
+        kubectl apply -f ingress.yaml
+

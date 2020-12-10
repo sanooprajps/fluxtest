@@ -1,0 +1,36 @@
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: fargate-cluster
+  region: us-east-1
+
+fargateProfiles:
+  - name: fp-default
+    selectors:
+      # All workloads in the "default" Kubernetes namespace will be
+      # scheduled onto Fargate:
+      - namespace: default
+      # All workloads in the "kube-system" Kubernetes namespace will be
+      # scheduled onto Fargate:
+      - namespace: kube-system
+  - name: fp-applications
+    selectors:
+      - namespace: applications
+vpc:
+  id: "vpc-0827b890559f17798"
+  subnets:
+    private:
+      us-east-1a:
+          id: "subnet-064ee9b791eef84b4"
+      us-east-1b:
+          id: "subnet-067a31ba1fbdd4fbb"
+    public:
+      us-east-1a:
+          id: "subnet-09111a87ccabb52e9"
+      us-east-1b:
+          id: "subnet-06bad90ed2ae45e7b"
+  securityGroup: "sg-032f001c494e062c7"
+iam:
+  fargatePodExecutionRoleARN: "arn:aws:iam::119131561188:role/AmazonEKSFargatePodExecutionRole"
